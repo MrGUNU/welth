@@ -1,6 +1,10 @@
+import HeroSection from "@/components/hero";
+
 
 export default function Home() {
   return (
-    <div>Hello World!</div>
+    <div className="mt-40">
+      <HeroSection />  
+    </div>
   );
 }
