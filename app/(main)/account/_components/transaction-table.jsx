@@ -63,8 +63,6 @@ const TransactionTable = ({ transactions }) => {
               <TableHead className="cursor-pointer" onClick={() => handleSort("category")}>
                 <div className='flex items-center'>
                   Category
-                  <div className="flex items-center">
-                  Date
                   {sortConfig.field === "category" &&
                     (sortConfig.direction === "asc" ? (
                       <ChevronUp className="ml-1 h-4 w-4" />
