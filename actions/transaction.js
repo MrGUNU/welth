@@ -254,7 +254,7 @@ export async function scanReceipt(file) {
         "category": "string"
       }
 
-      If its not a receipt, return an empty object
+      If its not a recipt, return an empty object
     `;
 
     const result = await model.generateContent([
@@ -267,7 +267,7 @@ export async function scanReceipt(file) {
       prompt,
     ]);
 
-    const response = result.response;
+    const response = await result.response;
     const text = response.text();
     const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
 
