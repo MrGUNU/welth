@@ -6,7 +6,7 @@ import { subDays } from "date-fns";
 const ACCOUNT_ID = "8e9de477-116a-4394-9d9f-c295813af632";
 const USER_ID = "2817d31d-5dfc-4059-9c71-5c4becacb5c4";
 
-// Categories with their typical amount ranges
+// Categories configuration (keep your existing)
 const CATEGORIES = {
   INCOME: [
     { name: "salary", range: [5000, 8000] },
@@ -28,12 +28,11 @@ const CATEGORIES = {
   ],
 };
 
-// Helper to generate random amount within a range
+// Helper functions (keep your existing)
 function getRandomAmount(min, max) {
   return Number((Math.random() * (max - min) + min).toFixed(2));
 }
 
-// Helper to get random category with amount
 function getRandomCategory(type) {
   const categories = CATEGORIES[type];
   const category = categories[Math.floor(Math.random() * categories.length)];
@@ -43,28 +42,39 @@ function getRandomCategory(type) {
 
 export async function seedTransactions() {
   try {
-    // Generate 90 days of transactions
+    // 1. First verify the account exists using findFirst (not findUnique)
+    const account = await db.account.findFirst({
+      where: {
+        id: ACCOUNT_ID,
+        userId: USER_ID
+      },
+      select: {
+        id: true,
+        balance: true
+      }
+    });
+
+    if (!account) {
+      throw new Error(`Account ${ACCOUNT_ID} not found for user ${USER_ID}`);
+    }
+
+    // 2. Generate transactions
     const transactions = [];
-    let totalBalance = 0;
+    let balanceChange = 0;
 
     for (let i = 90; i >= 0; i--) {
       const date = subDays(new Date(), i);
-
-      // Generate 1-3 transactions per day
       const transactionsPerDay = Math.floor(Math.random() * 3) + 1;
 
       for (let j = 0; j < transactionsPerDay; j++) {
-        // 40% chance of income, 60% chance of expense
         const type = Math.random() < 0.4 ? "INCOME" : "EXPENSE";
         const { category, amount } = getRandomCategory(type);
+        const signedAmount = type === "INCOME" ? +amount : -amount;
 
-        const transaction = {
-          id: crypto.randomUUID(),
+        transactions.push({
           type,
-          amount,
-          description: `${
-            type === "INCOME" ? "Received" : "Paid for"
-          } ${category}`,
+          amount: Math.abs(signedAmount), // Store absolute value
+          description: `${type === "INCOME" ? "Received" : "Paid for"} ${category}`,
           date,
           category,
           status: "COMPLETED",
@@ -72,38 +82,46 @@ export async function seedTransactions() {
           accountId: ACCOUNT_ID,
           createdAt: date,
           updatedAt: date,
-        };
+        });
 
-        totalBalance += type === "INCOME" ? amount : -amount;
-        transactions.push(transaction);
+        balanceChange += signedAmount;
       }
     }
 
-    // Insert transactions in batches and update account balance
-    await db.$transaction(async (tx) => {
-      // Clear existing transactions
-      await tx.transaction.deleteMany({
-        where: { accountId: ACCOUNT_ID },
-      });
-
-      // Insert new transactions
-      await tx.transaction.createMany({
-        data: transactions,
-      });
-
+    // 3. Execute as a transaction
+    const result = await db.$transaction([
+      // Delete existing transactions
+      db.transaction.deleteMany({
+        where: { accountId: ACCOUNT_ID }
+      }),
+      
+      // Create new transactions
+      db.transaction.createMany({
+        data: transactions
+      }),
+      
       // Update account balance
-      await tx.account.update({
+      db.account.update({
         where: { id: ACCOUNT_ID },
-        data: { balance: totalBalance },
-      });
-    });
+        data: { 
+          balance: Number(account.balance) + balanceChange,
+          updatedAt: new Date()
+        }
+      })
+    ]);
 
     return {
       success: true,
-      message: `Created ${transactions.length} transactions`,
+      transactionsCreated: result[1].count,
+      balanceUpdated: result[2].balance
     };
+
   } catch (error) {
-    console.error("Error seeding transactions:", error);
-    return { success: false, error: error.message };
+    console.error("Seeding failed:", error);
+    return {
+      success: false,
+      error: error.message,
+      ...(process.env.NODE_ENV === "development" && { stack: error.stack })
+    };
   }
 }
